@@ -17,9 +17,6 @@ use Mojiburrahaman\LaravelRouteCache\Enums\CacheStatus;
  */
 class CacheResponseBuilder
 {
-    /**
-     * @var CacheManagerInterface
-     */
     protected CacheManagerInterface $cacheManager;
 
     /**
@@ -37,6 +34,11 @@ class CacheResponseBuilder
      * @param string $cacheKey
      * @return Response|JsonResponse
      */
+    /**
+     * @param array<string, mixed> $cachedData
+     * @param string $cacheKey
+     * @return Response|JsonResponse
+     */
     public function build(array $cachedData, string $cacheKey)
     {
         $response = $this->createBaseResponse($cachedData);
@@ -49,6 +51,10 @@ class CacheResponseBuilder
     /**
      * Create base response with content
      *
+     * @param array<string, mixed> $cachedData
+     * @return Response|JsonResponse
+     */
+    /**
      * @param array<string, mixed> $cachedData
      * @return Response|JsonResponse
      */
@@ -82,6 +88,11 @@ class CacheResponseBuilder
      * @param array<string, mixed> $cachedData
      * @return void
      */
+    /**
+     * @param Response|JsonResponse $response
+     * @param array<string, mixed> $cachedData
+     * @return void
+     */
     protected function setHeaders($response, array $cachedData): void
     {
         $headers = $cachedData['headers'] ?? [];
@@ -102,9 +113,15 @@ class CacheResponseBuilder
      * @param string $cacheKey
      * @return void
      */
+    /**
+     * @param Response|JsonResponse $response
+     * @param array<string, mixed> $cachedData
+     * @param string $cacheKey
+     * @return void
+     */
     protected function addCacheMetadata($response, array $cachedData, string $cacheKey): void
     {
-        if (! config('laravel-route-cache.add_cache_headers', true)) {
+        if (! config(CacheConfig::CONFIG_ADD_CACHE_HEADERS, true)) {
             return;
         }
 

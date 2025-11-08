@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Redis\Connections\Connection as RedisConnection;
 use Mojiburrahaman\LaravelRouteCache\Config\CacheConfig;
 use Mojiburrahaman\LaravelRouteCache\Contracts\CacheManagerInterface;
 
@@ -19,15 +20,14 @@ use Mojiburrahaman\LaravelRouteCache\Contracts\CacheManagerInterface;
 class CacheManager implements CacheManagerInterface
 {
     private const LOCK_PREFIX = 'lock:';
-    /**
-     * @var string
-     */
     protected string $connection;
 
     /**
-     * @var mixed
+     * Redis connection instance used for cache operations
+     *
+     * @var RedisConnection|null
      */
-    protected $redisConnection;
+    protected ?RedisConnection $redisConnection = null;
 
     public function __construct()
     {
@@ -35,9 +35,11 @@ class CacheManager implements CacheManagerInterface
     }
 
     /**
-     * @return mixed
+     * Resolve and memoize the Redis connection.
+     *
+     * @return RedisConnection
      */
-    protected function redis()
+    protected function redis(): RedisConnection
     {
         if ($this->redisConnection === null) {
             $this->redisConnection = Redis::connection($this->connection);
@@ -229,6 +231,11 @@ class CacheManager implements CacheManagerInterface
             $keys = $redis->keys('*');
 
             if (! empty($keys) && is_array($keys)) {
+                $keys = $this->normalizeKeysForRedis($keys);
+                if (empty($keys)) {
+                    return true;
+                }
+
                 // Delete keys in batch for better performance
                 $redis->del(...$keys);
             }
@@ -275,6 +282,10 @@ class CacheManager implements CacheManagerInterface
             if (! in_array(strtolower($key), $excluded, true)) {
                 $result[$key] = $value;
             }
+        }
+
+        if (! empty($result)) {
+            ksort($result);
         }
 
         return $result;
@@ -345,10 +356,40 @@ class CacheManager implements CacheManagerInterface
     }
 
     /**
-     * @return mixed
+     * Expose the underlying Redis connection instance.
+     *
+     * @return RedisConnection
      */
-    public function getRedisConnection()
+    public function getRedisConnection(): RedisConnection
     {
         return $this->redis();
+    }
+
+    /**
+     * @param array<int, string> $keys
+     * @return array<int, string>
+     */
+    protected function normalizeKeysForRedis(array $keys): array
+    {
+        $prefix = $this->getRedisPrefix();
+
+        return array_values(array_filter(array_map(function ($key) use ($prefix) {
+            if (! is_string($key)) {
+                return null;
+            }
+
+            if ($prefix !== '' && strpos($key, $prefix) === 0) {
+                return substr($key, strlen($prefix));
+            }
+
+            return $key;
+        }, $keys)));
+    }
+
+    protected function getRedisPrefix(): string
+    {
+        $configPrefix = config("database.redis.{$this->connection}.options.prefix");
+
+        return is_string($configPrefix) ? $configPrefix : '';
     }
 }

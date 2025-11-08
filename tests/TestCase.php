@@ -3,6 +3,7 @@
 namespace Mojiburrahaman\LaravelRouteCache\Tests;
 
 use Illuminate\Support\Facades\Redis;
+use Mojiburrahaman\LaravelRouteCache\Config\CacheConfig;
 use Mojiburrahaman\LaravelRouteCache\LaravelRouteCacheServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
@@ -30,7 +31,7 @@ abstract class TestCase extends Orchestra
         $app['config']->set('laravel-route-cache.default_ttl', 3600);
         $app['config']->set('laravel-route-cache.cache_key_prefix', 'route_cache');
         $app['config']->set('laravel-route-cache.redis_connection', 'cache');
-        $app['config']->set('laravel-route-cache.add_cache_headers', true);
+        $app['config']->set(CacheConfig::CONFIG_ADD_CACHE_HEADERS, true);
         $app['config']->set('laravel-route-cache.cache_only_success', true);
         $app['config']->set('laravel-route-cache.ignore_query_params', ['utm_source', 'utm_medium']);
         $app['config']->set('laravel-route-cache.exclude_urls', ['api/admin/*']);
