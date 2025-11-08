@@ -323,13 +323,28 @@ class CacheManager implements CacheManagerInterface
             $token = bin2hex(random_bytes(16));
             $lockKey = $this->lockKey($key);
             $redis = $this->redis();
+            $client = $redis->client();
 
-            // Use Laravel's command method for cross-client compatibility
-            $result = $redis->command('SET', [$lockKey, $token, 'EX', $ttl, 'NX']);
+            if ($client instanceof \Predis\ClientInterface) {
+                $result = $client->set($lockKey, $token, 'EX', $ttl, 'NX');
+            } else {
+                $result = $client->set($lockKey, $token, [
+                    'NX',
+                    'EX' => $ttl,
+                ]);
+            }
 
-            // SET with NX returns 'OK' on success, null/false on failure
-            // Some clients may return true or 1
-            if ($result === 'OK' || $result === true || (is_int($result) && $result > 0)) {
+            if ($result instanceof \Predis\Response\Status) {
+                if ($result->getPayload() === 'OK') {
+                    return $token;
+                }
+            }
+
+            if ($result === 'OK' || $result === true) {
+                return $token;
+            }
+
+            if (is_int($result) && $result > 0) {
                 return $token;
             }
         } catch (\Exception $e) {
