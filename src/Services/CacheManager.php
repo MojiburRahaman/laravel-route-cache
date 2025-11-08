@@ -312,36 +312,35 @@ class CacheManager implements CacheManagerInterface
     {
         try {
             $lockKey = $this->lockKey($key);
-            $client = $this->getRedisClient();
+            $client = $this->getPredisClient();
 
-            if ($client instanceof PredisClientInterface) {
-                $client->watch($lockKey);
-                $current = $client->get($lockKey);
-
-                if ($current !== $token) {
-                    $client->unwatch();
-
-                    return false;
+            if ($client === null) {
+                $currentValue = $this->redis()->get($lockKey);
+                if ($currentValue === $token) {
+                    return (bool) $this->redis()->del($lockKey);
                 }
 
-                $client->multi();
-                $client->del($lockKey);
-                $result = $client->exec();
-
-                if ($result === false) {
-                    return false;
-                }
-
-                return $this->wasDeleted($result);
+                return false;
             }
 
-            // Fallback: best-effort delete without atomic guarantee
-            $currentValue = $this->redis()->get($lockKey);
-            if ($currentValue === $token) {
-                return (bool) $this->redis()->del($lockKey);
+            $client->watch($lockKey);
+            $current = $client->get($lockKey);
+
+            if ($current !== $token) {
+                $client->unwatch();
+
+                return false;
             }
 
-            return false;
+            $transaction = $client->transaction();
+            $transaction->del($lockKey);
+            $result = $transaction->execute();
+
+            if ($result === false) {
+                return false;
+            }
+
+            return $this->wasDeleted($result);
         } catch (\Exception $e) {
             Log::warning('RouteCache lock release failed', [
                 'key' => $key,
@@ -370,21 +369,21 @@ class CacheManager implements CacheManagerInterface
     }
 
     /**
-     * Get underlying Redis client instance.
+     * Get underlying Predis client instance.
      *
-     * @return PredisClientInterface|object|null
+     * @return PredisClientInterface|null
      */
-    protected function getRedisClient(): ?object
+    protected function getPredisClient(): ?PredisClientInterface
     {
         $connection = $this->redis();
 
         if ($connection instanceof RedisConnection) {
             $client = $connection->client();
 
-            return is_object($client) ? $client : null;
+            return $client instanceof PredisClientInterface ? $client : null;
         }
 
-        return is_object($connection) ? $connection : null;
+        return $connection instanceof PredisClientInterface ? $connection : null;
     }
 
     /**
