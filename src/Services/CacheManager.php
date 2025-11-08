@@ -323,20 +323,13 @@ class CacheManager implements CacheManagerInterface
             $token = bin2hex(random_bytes(16));
             $lockKey = $this->lockKey($key);
             $redis = $this->redis();
-            
-            // Try phpredis style first (array options)
-            $result = null;
-            try {
-                $result = $redis->set($lockKey, $token, [
-                    'EX' => $ttl,
-                    'NX' => true,
-                ]);
-            } catch (\TypeError|\ArgumentCountError $e) {
-                // Fallback to Predis style (string options)
-                $result = $redis->set($lockKey, $token, 'EX', $ttl, 'NX');
-            }
 
-            if ($result === true || $result === 'OK' || $result === 1 || $result === '1') {
+            // Use Laravel's command method for cross-client compatibility
+            $result = $redis->command('SET', [$lockKey, $token, 'EX', $ttl, 'NX']);
+
+            // SET with NX returns 'OK' on success, null/false on failure
+            // Some clients may return true or 1
+            if ($result === 'OK' || $result === true || (is_int($result) && $result > 0)) {
                 return $token;
             }
         } catch (\Exception $e) {
