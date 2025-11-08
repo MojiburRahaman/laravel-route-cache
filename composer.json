@@ -1,0 +1,58 @@
+{
+    "name": "mojiburrahaman/laravel-route-cache",
+    "description": "Laravel Redis cache middleware with TTL support for route response caching",
+    "type": "library",
+    "keywords": [
+        "laravel",
+        "cache",
+        "redis",
+        "middleware",
+        "route-cache",
+        "response-cache",
+        "performance"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Mojiburrahaman",
+            "email": "contact@mojiburrahaman.dev"
+        }
+    ],
+    "require": {
+        "php": "^8.0|^8.1|^8.2|^8.3",
+        "illuminate/support": "^9.0|^10.0|^11.0",
+        "illuminate/redis": "^9.0|^10.0|^11.0",
+        "illuminate/http": "^9.0|^10.0|^11.0",
+        "nesbot/carbon": "^2.67.0|^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.5|^10.0",
+        "orchestra/testbench": "^7.0|^8.0|^9.0",
+        "friendsofphp/php-cs-fixer": "^3.0",
+        "phpstan/phpstan": "^1.10",
+        "larastan/larastan": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Mojiburrahaman\\LaravelRouteCache\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Mojiburrahaman\\LaravelRouteCache\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Mojiburrahaman\\LaravelRouteCache\\LaravelRouteCacheServiceProvider"
+            ],
+            "aliases": {
+                "RouteCache": "Mojiburrahaman\\LaravelRouteCache\\Facades\\RouteCache"
+            }
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
+
