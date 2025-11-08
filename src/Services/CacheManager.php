@@ -340,10 +340,8 @@ class CacheManager implements CacheManagerInterface
                 return $token;
             }
 
-            if (is_object($result) && method_exists($result, 'getPayload')) {
-                if ($result->getPayload() === 'OK') {
-                    return $token;
-                }
+            if (is_object($result) && method_exists($result, 'getPayload') && $result->getPayload() === 'OK') {
+                return $token;
             }
         } catch (\Exception $e) {
             Log::warning('RouteCache lock acquire failed', [
