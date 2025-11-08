@@ -18,6 +18,7 @@ use Mojiburrahaman\LaravelRouteCache\Contracts\CacheManagerInterface;
  */
 class CacheManager implements CacheManagerInterface
 {
+    private const LOCK_PREFIX = 'lock:';
     /**
      * @var string
      */
@@ -66,6 +67,17 @@ class CacheManager implements CacheManagerInterface
         }
 
         return md5($prefix . ':' . $key);
+    }
+
+    /**
+     * Generate the Redis key used for cache locks.
+     *
+     * @param string $key
+     * @return string
+     */
+    protected function lockKey(string $key): string
+    {
+        return self::LOCK_PREFIX . $this->hashKey($key);
     }
 
     /**
@@ -266,6 +278,70 @@ class CacheManager implements CacheManagerInterface
         }
 
         return $result;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function acquireLock(string $key, int $ttl): ?string
+    {
+        try {
+            $token = bin2hex(random_bytes(16));
+            $lockKey = $this->lockKey($key);
+            $result = $this->redis()->set($lockKey, $token, 'EX', $ttl, 'NX');
+
+            if ($result === true || $result === 'OK') {
+                return $token;
+            }
+        } catch (\Exception $e) {
+            Log::warning('RouteCache lock acquire failed', [
+                'key' => $key,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function releaseLock(string $key, string $token): bool
+    {
+        try {
+            $lockKey = $this->lockKey($key);
+            $currentValue = $this->redis()->get($lockKey);
+
+            if ($currentValue !== $token) {
+                return false;
+            }
+
+            return (bool) $this->redis()->del($lockKey);
+        } catch (\Exception $e) {
+            Log::warning('RouteCache lock release failed', [
+                'key' => $key,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return false;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function isLocked(string $key): bool
+    {
+        try {
+            return (bool) $this->redis()->exists($this->lockKey($key));
+        } catch (\Exception $e) {
+            Log::warning('RouteCache lock status failed', [
+                'key' => $key,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return false;
     }
 
     /**

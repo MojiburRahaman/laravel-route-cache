@@ -83,4 +83,30 @@ interface CacheManagerInterface
      * @return mixed The Redis connection
      */
     public function getRedisConnection();
+
+    /**
+     * Attempt to acquire a cache generation lock for the given key.
+     *
+     * @param string $key Plain text cache key
+     * @param int $ttl Lock TTL in seconds
+     * @return string|null Lock token if acquired, null otherwise
+     */
+    public function acquireLock(string $key, int $ttl): ?string;
+
+    /**
+     * Release a previously acquired cache generation lock.
+     *
+     * @param string $key Plain text cache key
+     * @param string $token Lock token returned when the lock was acquired
+     * @return bool True if the lock was released, false otherwise
+     */
+    public function releaseLock(string $key, string $token): bool;
+
+    /**
+     * Determine if a lock is currently active for the given key.
+     *
+     * @param string $key Plain text cache key
+     * @return bool True when the lock exists, false otherwise
+     */
+    public function isLocked(string $key): bool;
 }

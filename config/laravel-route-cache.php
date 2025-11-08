@@ -145,4 +145,21 @@ return [
     |
     */
     'cache_key_prefix' => env('ROUTE_CACHE_KEY_PREFIX', 'route_cache'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cache Stampede Lock
+    |--------------------------------------------------------------------------
+    |
+    | Configure a lightweight lock to prevent cache stampedes when a key
+    | expires under heavy load. Adjust TTL (seconds), wait (milliseconds),
+    | and sleep (milliseconds) as needed for your workload.
+    |
+    */
+    'lock' => [
+        'enabled' => env('ROUTE_CACHE_LOCK_ENABLED', true),
+        'ttl' => (int) env('ROUTE_CACHE_LOCK_TTL', CacheConfig::DEFAULT_LOCK_TTL),
+        'wait_ms' => (int) env('ROUTE_CACHE_LOCK_WAIT_MS', CacheConfig::DEFAULT_LOCK_WAIT_MS),
+        'sleep_ms' => (int) env('ROUTE_CACHE_LOCK_SLEEP_MS', CacheConfig::DEFAULT_LOCK_SLEEP_MS),
+    ],
 ];

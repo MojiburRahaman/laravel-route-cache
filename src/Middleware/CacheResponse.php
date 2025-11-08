@@ -86,16 +86,39 @@ class CacheResponse
                 return $this->responseBuilder->build($cachedData, $cacheKey);
             }
 
-            // Execute request and cache response
-            $response = $next($request);
+            $resolvedTtl = $this->resolveTtl($ttl);
+            $lockToken = null;
+            $lockAcquired = false;
 
-            if ($this->validator->isResponseCacheable($response)) {
-                $this->cacheManager->put($cacheKey, $response, $ttl);
+            if ($this->shouldUseLock()) {
+                $lockToken = $this->attemptLock($cacheKey, $resolvedTtl, $lockAcquired);
+
+                if (! $lockAcquired) {
+                    $cachedData = $this->cacheManager->get($cacheKey);
+                    if ($cachedData !== null) {
+                        return $this->responseBuilder->build($cachedData, $cacheKey);
+                    }
+                }
             }
 
-            $this->addMissHeaders($response, $request);
+            $response = null;
 
-            return $response;
+            try {
+                // Execute request and cache response
+                $response = $next($request);
+
+                if ($this->validator->isResponseCacheable($response)) {
+                    $this->cacheManager->put($cacheKey, $response, $resolvedTtl);
+                }
+
+                $this->addMissHeaders($response, $request);
+
+                return $response;
+            } finally {
+                if ($lockAcquired && $lockToken !== null) {
+                    $this->cacheManager->releaseLock($cacheKey, $lockToken);
+                }
+            }
         } catch (\Exception $e) {
             // If caching fails, still execute the request but log the error
             \Illuminate\Support\Facades\Log::warning('Route cache middleware failed', [
@@ -111,6 +134,109 @@ class CacheResponse
 
             return $response;
         }
+    }
+
+    /**
+     * Normalize TTL from middleware or config.
+     *
+     * @param int|string|null $ttl
+     * @return int|null
+     */
+    protected function resolveTtl($ttl): ?int
+    {
+        if ($ttl === null) {
+            return $this->normalizeTtlValue(config('laravel-route-cache.default_ttl', CacheConfig::DEFAULT_TTL));
+        }
+
+        return $this->normalizeTtlValue($ttl);
+    }
+
+    /**
+     * Determine if lock handling should run.
+     *
+     * @return bool
+     */
+    protected function shouldUseLock(): bool
+    {
+        $lockConfig = config('laravel-route-cache.lock', []);
+
+        return (bool) ($lockConfig['enabled'] ?? true);
+    }
+
+    /**
+     * Attempt to acquire a cache generation lock.
+     *
+     * @param string $cacheKey
+     * @param int|null $ttl
+     * @param bool $lockAcquired
+     * @return string|null Lock token if acquired
+     */
+    protected function attemptLock(string $cacheKey, ?int $ttl, bool &$lockAcquired): ?string
+    {
+        $lockConfig = config('laravel-route-cache.lock', []);
+        $lockTtl = (int) ($lockConfig['ttl'] ?? CacheConfig::DEFAULT_LOCK_TTL);
+
+        if ($ttl !== null && $ttl > 0) {
+            $lockTtl = (int) min($lockTtl, $ttl);
+        }
+
+        $lockTtl = max($lockTtl, 1);
+        $token = $this->cacheManager->acquireLock($cacheKey, $lockTtl);
+
+        if ($token !== null) {
+            $lockAcquired = true;
+
+            return $token;
+        }
+
+        $waitMs = (int) ($lockConfig['wait_ms'] ?? CacheConfig::DEFAULT_LOCK_WAIT_MS);
+        $sleepMs = (int) ($lockConfig['sleep_ms'] ?? CacheConfig::DEFAULT_LOCK_SLEEP_MS);
+        $sleepMs = max(1, $sleepMs);
+
+        $elapsed = 0;
+
+        while ($elapsed < $waitMs) {
+            usleep($sleepMs * 1000);
+
+            $cachedData = $this->cacheManager->get($cacheKey);
+            if ($cachedData !== null) {
+                return null;
+            }
+
+            $token = $this->cacheManager->acquireLock($cacheKey, $lockTtl);
+            if ($token !== null) {
+                $lockAcquired = true;
+
+                return $token;
+            }
+
+            $elapsed += $sleepMs;
+        }
+
+        return null;
+    }
+
+    /**
+     * Normalize TTL input into a positive integer or null.
+     *
+     * @param mixed $value
+     * @return int|null
+     */
+    protected function normalizeTtlValue($value): ?int
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (is_string($value) && is_numeric($value)) {
+            $value = (int) $value;
+        }
+
+        if (is_int($value) && $value > 0) {
+            return $value;
+        }
+
+        return null;
     }
 
     /**

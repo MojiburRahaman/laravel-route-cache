@@ -110,6 +110,7 @@ class CacheResponseBuilder
 
         $response->headers->set(CacheConfig::HEADER_CACHE_STATUS, CacheStatus::HIT);
         $response->headers->set(CacheConfig::HEADER_CACHED_AT, $cachedData['cached_at'] ?? '');
+        $response->headers->set(CacheConfig::HEADER_CACHE_KEY, $cacheKey);
 
         $ttl = $this->cacheManager->ttl($cacheKey);
         if ($ttl !== null) {

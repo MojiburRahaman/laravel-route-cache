@@ -60,6 +60,13 @@ final class CacheConfig
     public const HEADER_CACHE_TTL = 'X-Cache-TTL';
 
     /**
+     * Lock defaults (in seconds / milliseconds)
+     */
+    public const DEFAULT_LOCK_TTL = 10;
+    public const DEFAULT_LOCK_WAIT_MS = 3000;
+    public const DEFAULT_LOCK_SLEEP_MS = 50;
+
+    /**
      * Prevent instantiation
      */
     private function __construct()

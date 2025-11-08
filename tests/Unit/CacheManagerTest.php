@@ -60,4 +60,21 @@ class CacheManagerTest extends TestCase
         $this->cacheManager->forget($key);
         $this->assertFalse($this->cacheManager->has($key));
     }
+
+    /** @test */
+    public function it_handles_locks_correctly()
+    {
+        $key = 'lock-key';
+
+        $token = $this->cacheManager->acquireLock($key, 5);
+        if ($token === null) {
+            $this->markTestSkipped('Redis is not available to validate lock behaviour.');
+        }
+
+        $this->assertNotNull($token);
+        $this->assertTrue($this->cacheManager->isLocked($key));
+
+        $this->assertTrue($this->cacheManager->releaseLock($key, $token));
+        $this->assertFalse($this->cacheManager->isLocked($key));
+    }
 }
