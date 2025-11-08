@@ -23,7 +23,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
-            const { data: existing } = await github.pulls.list({
+            const { data: existing } = await github.rest.pulls.list({
               owner,
               repo,
               head: `${owner}:${branch}`,
@@ -36,7 +36,7 @@ jobs:
               return;
             }
 
-            await github.pulls.create({
+            const { data: pr } = await github.rest.pulls.create({
               owner,
               repo,
               head: branch,
@@ -44,5 +44,5 @@ jobs:
               title: `Auto PR: ${branch} → main`,
               body: 'Automatic pull request created from push event.',
             });
-            console.log(`Created pull request for ${branch} -> main.`);
+            console.log(`Created pull request #${pr.number} for ${branch} -> main.`);
 
