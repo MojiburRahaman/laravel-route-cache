@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Redis\Connections\Connection as RedisConnection;
 use Mojiburrahaman\LaravelRouteCache\Config\CacheConfig;
 use Mojiburrahaman\LaravelRouteCache\Contracts\CacheManagerInterface;
 
@@ -312,7 +313,7 @@ class CacheManager implements CacheManagerInterface
             $lockKey = $this->lockKey($key);
             $client = $this->getRedisClient();
 
-            if (! method_exists($client, 'watch')) {
+            if (! $client || ! method_exists($client, 'watch')) {
                 // Fallback: best-effort delete without atomic guarantee
                 $currentValue = $this->redis()->get($lockKey);
                 if ($currentValue === $token) {
@@ -333,6 +334,7 @@ class CacheManager implements CacheManagerInterface
 
             $client->multi();
             $client->del($lockKey);
+            /** @var mixed $result */
             $result = $client->exec();
 
             if ($result === false) {
@@ -376,17 +378,19 @@ class CacheManager implements CacheManagerInterface
     /**
      * Get underlying Redis client instance.
      *
-     * @return mixed
+     * @return object|null
      */
-    protected function getRedisClient()
+    protected function getRedisClient(): ?object
     {
         $connection = $this->redis();
 
-        if (is_object($connection) && method_exists($connection, 'client')) {
-            return $connection->client();
+        if ($connection instanceof RedisConnection) {
+            $client = $connection->client();
+
+            return is_object($client) ? $client : null;
         }
 
-        return $connection;
+        return is_object($connection) ? $connection : null;
     }
 
     /**
