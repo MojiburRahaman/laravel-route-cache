@@ -324,6 +324,7 @@ class CacheManager implements CacheManagerInterface
             $lockKey = $this->lockKey($key);
             $redis = $this->redis();
             $ttl = $ttl > 0 ? $ttl : CacheConfig::DEFAULT_LOCK_TTL;
+            /** @var mixed|null $client */
             $client = method_exists($redis, 'client') ? $redis->client() : null;
 
             if (is_object($client) && class_exists('Redis') && get_class($client) === 'Redis') {
@@ -332,9 +333,15 @@ class CacheManager implements CacheManagerInterface
                     'NX',
                     'EX' => $ttl,
                 ]);
+            } elseif (is_object($client) && method_exists($client, 'set')) {
+                /** @var mixed $result */
+                $result = $client->set($lockKey, $token, 'EX', $ttl, 'NX');
             } else {
                 /** @var mixed $result */
-                $result = $redis->set($lockKey, $token, 'EX', $ttl, 'NX');
+                $result = $redis->command('SET', [$lockKey, $token, [
+                    'NX',
+                    'EX' => $ttl,
+                ]]);
             }
 
             if ($result === true || $result === 'OK') {
