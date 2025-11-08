@@ -9,6 +9,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Redis\Connections\Connection as RedisConnection;
+use Predis\ClientInterface as PredisClientInterface;
 use Mojiburrahaman\LaravelRouteCache\Config\CacheConfig;
 use Mojiburrahaman\LaravelRouteCache\Contracts\CacheManagerInterface;
 
@@ -313,41 +314,34 @@ class CacheManager implements CacheManagerInterface
             $lockKey = $this->lockKey($key);
             $client = $this->getRedisClient();
 
-            if (! $client || ! method_exists($client, 'watch')) {
-                // Fallback: best-effort delete without atomic guarantee
-                $currentValue = $this->redis()->get($lockKey);
-                if ($currentValue === $token) {
-                    return (bool) $this->redis()->del($lockKey);
+            if ($client instanceof PredisClientInterface) {
+                $client->watch($lockKey);
+                $current = $client->get($lockKey);
+
+                if ($current !== $token) {
+                    $client->unwatch();
+
+                    return false;
                 }
 
-                return false;
+                $client->multi();
+                $client->del($lockKey);
+                $result = $client->exec();
+
+                if ($result === false) {
+                    return false;
+                }
+
+                return $this->wasDeleted($result);
             }
 
-            $client->watch($lockKey);
-            $current = $client->get($lockKey);
-
-            if ($current !== $token) {
-                $client->unwatch();
-
-                return false;
+            // Fallback: best-effort delete without atomic guarantee
+            $currentValue = $this->redis()->get($lockKey);
+            if ($currentValue === $token) {
+                return (bool) $this->redis()->del($lockKey);
             }
 
-            $client->multi();
-            $client->del($lockKey);
-            /** @var mixed $result */
-            $result = $client->exec();
-
-            if ($result === false) {
-                return false;
-            }
-
-            if (is_array($result)) {
-                $deleted = (int) ($result[0] ?? 0);
-            } else {
-                $deleted = (int) $result;
-            }
-
-            return $deleted === 1;
+            return false;
         } catch (\Exception $e) {
             Log::warning('RouteCache lock release failed', [
                 'key' => $key,
@@ -378,7 +372,7 @@ class CacheManager implements CacheManagerInterface
     /**
      * Get underlying Redis client instance.
      *
-     * @return object|null
+     * @return PredisClientInterface|object|null
      */
     protected function getRedisClient(): ?object
     {
@@ -391,6 +385,27 @@ class CacheManager implements CacheManagerInterface
         }
 
         return is_object($connection) ? $connection : null;
+    }
+
+    /**
+     * Determine if delete succeeded.
+     *
+     * @param mixed $result
+     * @return bool
+     */
+    protected function wasDeleted($result): bool
+    {
+        if ($result === false) {
+            return false;
+        }
+
+        if (is_array($result)) {
+            $deleted = (int) ($result[0] ?? 0);
+        } else {
+            $deleted = (int) $result;
+        }
+
+        return $deleted === 1;
     }
 
     /**
