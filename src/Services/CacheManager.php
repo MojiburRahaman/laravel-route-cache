@@ -323,14 +323,8 @@ class CacheManager implements CacheManagerInterface
             $token = bin2hex(random_bytes(16));
             $lockKey = $this->lockKey($key);
             $redis = $this->redis();
-            $options = ['nx' => true];
-
-            if ($ttl > 0) {
-                $options['ex'] = $ttl;
-            }
-
-            // Works for both phpredis and Predis (array options)
-            $result = $redis->set($lockKey, $token, $options);
+            $ttl = $ttl > 0 ? $ttl : CacheConfig::DEFAULT_LOCK_TTL;
+            $result = $redis->command('SET', [$lockKey, $token, 'EX', $ttl, 'NX']);
 
             if ($result === true || $result === 'OK') {
                 return $token;
@@ -340,7 +334,9 @@ class CacheManager implements CacheManagerInterface
                 return $token;
             }
 
-            if (is_object($result) && method_exists($result, 'getPayload') && $result->getPayload() === 'OK') {
+            if (is_object($result) &&
+             method_exists($result, 'getPayload') && 
+             strtoupper((string) $result->getPayload()) === 'OK') {
                 return $token;
             }
         } catch (\Exception $e) {
