@@ -8,8 +8,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
-use Illuminate\Redis\Connections\Connection as RedisConnection;
-use Predis\ClientInterface as PredisClientInterface;
 use Mojiburrahaman\LaravelRouteCache\Config\CacheConfig;
 use Mojiburrahaman\LaravelRouteCache\Contracts\CacheManagerInterface;
 
@@ -312,35 +310,13 @@ class CacheManager implements CacheManagerInterface
     {
         try {
             $lockKey = $this->lockKey($key);
-            $client = $this->getPredisClient();
+            $currentValue = $this->redis()->get($lockKey);
 
-            if ($client === null) {
-                $currentValue = $this->redis()->get($lockKey);
-                if ($currentValue === $token) {
-                    return (bool) $this->redis()->del($lockKey);
-                }
-
+            if ($currentValue !== $token) {
                 return false;
             }
 
-            $client->watch($lockKey);
-            $current = $client->get($lockKey);
-
-            if ($current !== $token) {
-                $client->unwatch();
-
-                return false;
-            }
-
-            $transaction = $client->transaction();
-            $transaction->del($lockKey);
-            $result = $transaction->execute();
-
-            if ($result === false) {
-                return false;
-            }
-
-            return $this->wasDeleted($result);
+            return (bool) $this->redis()->del($lockKey);
         } catch (\Exception $e) {
             Log::warning('RouteCache lock release failed', [
                 'key' => $key,
@@ -366,45 +342,6 @@ class CacheManager implements CacheManagerInterface
         }
 
         return false;
-    }
-
-    /**
-     * Get underlying Predis client instance.
-     *
-     * @return PredisClientInterface|null
-     */
-    protected function getPredisClient(): ?PredisClientInterface
-    {
-        $connection = $this->redis();
-
-        if ($connection instanceof RedisConnection) {
-            $client = $connection->client();
-
-            return $client instanceof PredisClientInterface ? $client : null;
-        }
-
-        return $connection instanceof PredisClientInterface ? $connection : null;
-    }
-
-    /**
-     * Determine if delete succeeded.
-     *
-     * @param mixed $result
-     * @return bool
-     */
-    protected function wasDeleted($result): bool
-    {
-        if ($result === false) {
-            return false;
-        }
-
-        if (is_array($result)) {
-            $deleted = (int) ($result[0] ?? 0);
-        } else {
-            $deleted = (int) $result;
-        }
-
-        return $deleted === 1;
     }
 
     /**
