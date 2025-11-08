@@ -323,29 +323,27 @@ class CacheManager implements CacheManagerInterface
             $token = bin2hex(random_bytes(16));
             $lockKey = $this->lockKey($key);
             $redis = $this->redis();
-            $client = $redis->client();
+            $options = ['nx' => true];
 
-            if ($client instanceof \Predis\ClientInterface) {
-                $result = $client->set($lockKey, $token, 'EX', $ttl, 'NX');
-            } else {
-                $result = $client->set($lockKey, $token, [
-                    'NX',
-                    'EX' => $ttl,
-                ]);
+            if ($ttl > 0) {
+                $options['ex'] = $ttl;
             }
 
-            if ($result instanceof \Predis\Response\Status) {
-                if ($result->getPayload() === 'OK') {
-                    return $token;
-                }
-            }
+            // Works for both phpredis and Predis (array options)
+            $result = $redis->set($lockKey, $token, $options);
 
-            if ($result === 'OK' || $result === true) {
+            if ($result === true || $result === 'OK') {
                 return $token;
             }
 
             if (is_int($result) && $result > 0) {
                 return $token;
+            }
+
+            if (is_object($result) && method_exists($result, 'getPayload')) {
+                if ($result->getPayload() === 'OK') {
+                    return $token;
+                }
             }
         } catch (\Exception $e) {
             Log::warning('RouteCache lock acquire failed', [
