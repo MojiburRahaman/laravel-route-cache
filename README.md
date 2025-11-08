@@ -13,6 +13,7 @@ A simple and powerful Laravel package for caching route responses in Redis. Spee
 - 🎯 **Flexible** - Per-route or route group caching
 - 🔑 **Smart Keys** - Plain text cache keys with automatic hashing
 - 👤 **User-Aware** - Different cache for authenticated users
+- 🔒 **Stampede Safe** - Redis locks prevent cache storms under load
 - 🎨 **Developer Friendly** - Debug headers and artisan commands
 - 🛡️ **Production Ready** - Secure and battle-tested
 
@@ -145,6 +146,14 @@ return [
 
     // Add debug headers
     'add_cache_headers' => true,
+
+    // Prevent cache stampedes
+    'lock' => [
+        'enabled' => true,
+        'ttl' => 10,        // lock lifetime (seconds)
+        'wait_ms' => 3000,  // total wait time while another request warms the cache
+        'sleep_ms' => 50,   // wait between retries
+    ],
 ];
 ```
 
