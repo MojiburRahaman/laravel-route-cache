@@ -108,6 +108,14 @@ class CacheManager implements CacheManagerInterface
             $cached = $this->redis()->get($hashedKey);
 
             if ($cached) {
+                // Handle array return (some Redis clients return arrays)
+                if (is_array($cached)) {
+                    $cached = $cached[0] ?? null;
+                }
+                if (! is_string($cached)) {
+                    return null;
+                }
+
                 $decoded = json_decode($cached, true);
 
                 if (! is_array($decoded)) {
@@ -217,11 +225,12 @@ class CacheManager implements CacheManagerInterface
             $hashedKey = $this->hashKey($key);
             $result = $this->redis()->del($hashedKey);
 
-            if ($result === true) {
-                return true;
+            // del() returns int (number of keys deleted) or false
+            if (is_int($result)) {
+                return $result > 0;
             }
 
-            return is_int($result) ? $result > 0 : false;
+            return false;
         } catch (\Exception $e) {
             Log::error('RouteCache forget failed', ['key' => $key, 'error' => $e->getMessage()]);
         }
@@ -313,12 +322,21 @@ class CacheManager implements CacheManagerInterface
         try {
             $token = bin2hex(random_bytes(16));
             $lockKey = $this->lockKey($key);
-            $result = $this->redis()->set($lockKey, $token, [
-                'EX' => $ttl,
-                'NX' => true,
-            ]);
+            $redis = $this->redis();
+            
+            // Try phpredis style first (array options)
+            $result = null;
+            try {
+                $result = $redis->set($lockKey, $token, [
+                    'EX' => $ttl,
+                    'NX' => true,
+                ]);
+            } catch (\TypeError|\ArgumentCountError $e) {
+                // Fallback to Predis style (string options)
+                $result = $redis->set($lockKey, $token, 'EX', $ttl, 'NX');
+            }
 
-            if ($result === true || $result === 'OK') {
+            if ($result === true || $result === 'OK' || $result === 1 || $result === '1') {
                 return $token;
             }
         } catch (\Exception $e) {
@@ -340,17 +358,23 @@ class CacheManager implements CacheManagerInterface
             $lockKey = $this->lockKey($key);
             $currentValue = $this->redis()->get($lockKey);
 
+            // Handle array return (some Redis clients return arrays)
+            if (is_array($currentValue)) {
+                $currentValue = $currentValue[0] ?? null;
+            }
+
             if ($currentValue !== $token) {
                 return false;
             }
 
             $deleted = $this->redis()->del($lockKey);
 
-            if ($deleted === true) {
-                return true;
+            // del() returns int (number of keys deleted) or false
+            if (is_int($deleted)) {
+                return $deleted > 0;
             }
 
-            return is_int($deleted) ? $deleted > 0 : false;
+            return false;
         } catch (\Exception $e) {
             Log::warning('RouteCache lock release failed', [
                 'key' => $key,
