@@ -6,9 +6,9 @@ namespace Mojiburrahaman\LaravelRouteCache\Services;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
+use Illuminate\Redis\Connections\Connection as RedisConnection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
-use Illuminate\Redis\Connections\Connection as RedisConnection;
 use Mojiburrahaman\LaravelRouteCache\Config\CacheConfig;
 use Mojiburrahaman\LaravelRouteCache\Contracts\CacheManagerInterface;
 
@@ -190,7 +190,13 @@ class CacheManager implements CacheManagerInterface
         try {
             $hashedKey = $this->hashKey($key);
 
-            return (bool) $this->redis()->exists($hashedKey);
+            $exists = $this->redis()->exists($hashedKey);
+
+            if ($exists === true) {
+                return true;
+            }
+
+            return is_int($exists) ? $exists > 0 : false;
         } catch (\Exception $e) {
             Log::error('RouteCache has failed', ['key' => $key, 'error' => $e->getMessage()]);
         }
@@ -211,7 +217,11 @@ class CacheManager implements CacheManagerInterface
             $hashedKey = $this->hashKey($key);
             $result = $this->redis()->del($hashedKey);
 
-            return $result > 0;
+            if ($result === true) {
+                return true;
+            }
+
+            return is_int($result) ? $result > 0 : false;
         } catch (\Exception $e) {
             Log::error('RouteCache forget failed', ['key' => $key, 'error' => $e->getMessage()]);
         }
@@ -261,7 +271,11 @@ class CacheManager implements CacheManagerInterface
             $hashedKey = $this->hashKey($key);
             $ttl = $this->redis()->ttl($hashedKey);
 
-            return ($ttl >= 0) ? (int) $ttl : null;
+            if (! is_int($ttl)) {
+                return null;
+            }
+
+            return $ttl >= 0 ? $ttl : null;
         } catch (\Exception $e) {
             Log::error('RouteCache ttl failed', ['key' => $key, 'error' => $e->getMessage()]);
         }
@@ -299,7 +313,10 @@ class CacheManager implements CacheManagerInterface
         try {
             $token = bin2hex(random_bytes(16));
             $lockKey = $this->lockKey($key);
-            $result = $this->redis()->set($lockKey, $token, 'EX', $ttl, 'NX');
+            $result = $this->redis()->set($lockKey, $token, [
+                'EX' => $ttl,
+                'NX' => true,
+            ]);
 
             if ($result === true || $result === 'OK') {
                 return $token;
@@ -327,7 +344,13 @@ class CacheManager implements CacheManagerInterface
                 return false;
             }
 
-            return (bool) $this->redis()->del($lockKey);
+            $deleted = $this->redis()->del($lockKey);
+
+            if ($deleted === true) {
+                return true;
+            }
+
+            return is_int($deleted) ? $deleted > 0 : false;
         } catch (\Exception $e) {
             Log::warning('RouteCache lock release failed', [
                 'key' => $key,
@@ -344,7 +367,13 @@ class CacheManager implements CacheManagerInterface
     public function isLocked(string $key): bool
     {
         try {
-            return (bool) $this->redis()->exists($this->lockKey($key));
+            $exists = $this->redis()->exists($this->lockKey($key));
+
+            if ($exists === true) {
+                return true;
+            }
+
+            return is_int($exists) ? $exists > 0 : false;
         } catch (\Exception $e) {
             Log::warning('RouteCache lock status failed', [
                 'key' => $key,
