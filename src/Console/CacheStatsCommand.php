@@ -72,7 +72,13 @@ class CacheStatsCommand extends Command
             // Since the connection already has the prefix, search for all keys
             // The connection prefix is already set (e.g., 'route_cache:') so we just need '*'
             $keys = $redis->keys('*');
-            $totalKeys = is_array($keys) ? count($keys) : 0;
+            if (is_array($keys)) {
+                sort($keys, SORT_STRING);
+                $totalKeys = count($keys);
+            } else {
+                $keys = [];
+                $totalKeys = 0;
+            }
 
             $this->table(
                 ['Metric', 'Value'],
@@ -106,6 +112,8 @@ class CacheStatsCommand extends Command
 
                     return [$displayKey, $ttlDisplay];
                 }, $sampleKeys);
+
+                usort($keyData, static fn (array $a, array $b): int => strcmp($a[0], $b[0]));
 
                 $this->table(['Cache Key', 'TTL'], $keyData);
             }

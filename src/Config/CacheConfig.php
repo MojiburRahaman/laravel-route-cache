@@ -60,6 +60,11 @@ final class CacheConfig
     public const HEADER_CACHE_TTL = 'X-Cache-TTL';
 
     /**
+     * Configuration keys
+     */
+    public const CONFIG_ADD_CACHE_HEADERS = 'laravel-route-cache.add_cache_headers';
+
+    /**
      * Lock defaults (in seconds / milliseconds)
      */
     public const DEFAULT_LOCK_TTL = 10;

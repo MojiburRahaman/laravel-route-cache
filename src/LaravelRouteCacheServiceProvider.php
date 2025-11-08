@@ -30,7 +30,7 @@ class LaravelRouteCacheServiceProvider extends ServiceProvider
      *
      * @return void
      */
-    public function boot()
+    public function boot(): void
     {
         // Publish configuration
         $this->publishes([
@@ -117,7 +117,7 @@ class LaravelRouteCacheServiceProvider extends ServiceProvider
      *
      * @return void
      */
-    protected function configureRedisConnection()
+    protected function configureRedisConnection(): void
     {
         $redisConfig = config('laravel-route-cache.redis');
 

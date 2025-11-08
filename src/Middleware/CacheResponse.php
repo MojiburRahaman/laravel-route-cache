@@ -248,7 +248,7 @@ class CacheResponse
      */
     protected function addMissHeaders($response, Request $request): void
     {
-        if (! config('laravel-route-cache.add_cache_headers', true)) {
+        if (! config(CacheConfig::CONFIG_ADD_CACHE_HEADERS, true)) {
             return;
         }
 

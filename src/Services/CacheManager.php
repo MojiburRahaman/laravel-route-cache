@@ -6,6 +6,7 @@ namespace Mojiburrahaman\LaravelRouteCache\Services;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
+use Illuminate\Redis\Connections\Connection as RedisConnection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
 use Mojiburrahaman\LaravelRouteCache\Config\CacheConfig;
@@ -19,15 +20,14 @@ use Mojiburrahaman\LaravelRouteCache\Contracts\CacheManagerInterface;
 class CacheManager implements CacheManagerInterface
 {
     private const LOCK_PREFIX = 'lock:';
-    /**
-     * @var string
-     */
     protected string $connection;
 
     /**
-     * @var mixed
+     * Redis connection instance used for cache operations
+     *
+     * @var RedisConnection|null
      */
-    protected $redisConnection;
+    protected ?RedisConnection $redisConnection = null;
 
     public function __construct()
     {
@@ -35,9 +35,11 @@ class CacheManager implements CacheManagerInterface
     }
 
     /**
-     * @return mixed
+     * Resolve and memoize the Redis connection.
+     *
+     * @return RedisConnection
      */
-    protected function redis()
+    protected function redis(): RedisConnection
     {
         if ($this->redisConnection === null) {
             $this->redisConnection = Redis::connection($this->connection);
@@ -106,6 +108,14 @@ class CacheManager implements CacheManagerInterface
             $cached = $this->redis()->get($hashedKey);
 
             if ($cached) {
+                // Handle array return (some Redis clients return arrays)
+                if (is_array($cached)) {
+                    $cached = $cached[0] ?? null;
+                }
+                if (! is_string($cached)) {
+                    return null;
+                }
+
                 $decoded = json_decode($cached, true);
 
                 if (! is_array($decoded)) {
@@ -188,7 +198,13 @@ class CacheManager implements CacheManagerInterface
         try {
             $hashedKey = $this->hashKey($key);
 
-            return (bool) $this->redis()->exists($hashedKey);
+            $exists = $this->redis()->exists($hashedKey);
+
+            if ($exists === true) {
+                return true;
+            }
+
+            return is_int($exists) ? $exists > 0 : false;
         } catch (\Exception $e) {
             Log::error('RouteCache has failed', ['key' => $key, 'error' => $e->getMessage()]);
         }
@@ -209,7 +225,12 @@ class CacheManager implements CacheManagerInterface
             $hashedKey = $this->hashKey($key);
             $result = $this->redis()->del($hashedKey);
 
-            return $result > 0;
+            // del() returns int (number of keys deleted) or false
+            if (is_int($result)) {
+                return $result > 0;
+            }
+
+            return false;
         } catch (\Exception $e) {
             Log::error('RouteCache forget failed', ['key' => $key, 'error' => $e->getMessage()]);
         }
@@ -229,6 +250,11 @@ class CacheManager implements CacheManagerInterface
             $keys = $redis->keys('*');
 
             if (! empty($keys) && is_array($keys)) {
+                $keys = $this->normalizeKeysForRedis($keys);
+                if (empty($keys)) {
+                    return true;
+                }
+
                 // Delete keys in batch for better performance
                 $redis->del(...$keys);
             }
@@ -254,7 +280,11 @@ class CacheManager implements CacheManagerInterface
             $hashedKey = $this->hashKey($key);
             $ttl = $this->redis()->ttl($hashedKey);
 
-            return ($ttl >= 0) ? (int) $ttl : null;
+            if (! is_int($ttl)) {
+                return null;
+            }
+
+            return $ttl >= 0 ? $ttl : null;
         } catch (\Exception $e) {
             Log::error('RouteCache ttl failed', ['key' => $key, 'error' => $e->getMessage()]);
         }
@@ -277,6 +307,10 @@ class CacheManager implements CacheManagerInterface
             }
         }
 
+        if (! empty($result)) {
+            ksort($result);
+        }
+
         return $result;
     }
 
@@ -288,9 +322,39 @@ class CacheManager implements CacheManagerInterface
         try {
             $token = bin2hex(random_bytes(16));
             $lockKey = $this->lockKey($key);
-            $result = $this->redis()->set($lockKey, $token, 'EX', $ttl, 'NX');
+            $redis = $this->redis();
+            $ttl = $ttl > 0 ? $ttl : CacheConfig::DEFAULT_LOCK_TTL;
+            /** @var mixed|null $client */
+            $client = method_exists($redis, 'client') ? $redis->client() : null;
+
+            if (is_object($client) && class_exists('Redis') && get_class($client) === 'Redis') {
+                /** @var mixed $result */
+                $result = $client->set($lockKey, $token, [
+                    'NX',
+                    'EX' => $ttl,
+                ]);
+            } elseif (is_object($client) && method_exists($client, 'set')) {
+                /** @var mixed $result */
+                $result = $client->set($lockKey, $token, 'EX', $ttl, 'NX');
+            } else {
+                /** @var mixed $result */
+                $result = $redis->command('SET', [$lockKey, $token, [
+                    'NX',
+                    'EX' => $ttl,
+                ]]);
+            }
 
             if ($result === true || $result === 'OK') {
+                return $token;
+            }
+
+            if (is_int($result) && $result > 0) {
+                return $token;
+            }
+
+            if (is_object($result) &&
+                method_exists($result, 'getPayload') &&
+                strtoupper((string) $result->getPayload()) === 'OK') {
                 return $token;
             }
         } catch (\Exception $e) {
@@ -312,11 +376,23 @@ class CacheManager implements CacheManagerInterface
             $lockKey = $this->lockKey($key);
             $currentValue = $this->redis()->get($lockKey);
 
+            // Handle array return (some Redis clients return arrays)
+            if (is_array($currentValue)) {
+                $currentValue = $currentValue[0] ?? null;
+            }
+
             if ($currentValue !== $token) {
                 return false;
             }
 
-            return (bool) $this->redis()->del($lockKey);
+            $deleted = $this->redis()->del($lockKey);
+
+            // del() returns int (number of keys deleted) or false
+            if (is_int($deleted)) {
+                return $deleted > 0;
+            }
+
+            return false;
         } catch (\Exception $e) {
             Log::warning('RouteCache lock release failed', [
                 'key' => $key,
@@ -333,7 +409,13 @@ class CacheManager implements CacheManagerInterface
     public function isLocked(string $key): bool
     {
         try {
-            return (bool) $this->redis()->exists($this->lockKey($key));
+            $exists = $this->redis()->exists($this->lockKey($key));
+
+            if ($exists === true) {
+                return true;
+            }
+
+            return is_int($exists) ? $exists > 0 : false;
         } catch (\Exception $e) {
             Log::warning('RouteCache lock status failed', [
                 'key' => $key,
@@ -345,10 +427,40 @@ class CacheManager implements CacheManagerInterface
     }
 
     /**
-     * @return mixed
+     * Expose the underlying Redis connection instance.
+     *
+     * @return RedisConnection
      */
-    public function getRedisConnection()
+    public function getRedisConnection(): RedisConnection
     {
         return $this->redis();
+    }
+
+    /**
+     * @param array<int, string> $keys
+     * @return array<int, string>
+     */
+    protected function normalizeKeysForRedis(array $keys): array
+    {
+        $prefix = $this->getRedisPrefix();
+
+        return array_values(array_filter(array_map(function ($key) use ($prefix) {
+            if (! is_string($key)) {
+                return null;
+            }
+
+            if ($prefix !== '' && strpos($key, $prefix) === 0) {
+                return substr($key, strlen($prefix));
+            }
+
+            return $key;
+        }, $keys)));
+    }
+
+    protected function getRedisPrefix(): string
+    {
+        $configPrefix = config("database.redis.{$this->connection}.options.prefix");
+
+        return is_string($configPrefix) ? $configPrefix : '';
     }
 }

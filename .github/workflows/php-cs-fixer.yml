@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  repository_dispatch:
+    types: [trigger-php-cs-fixer]
 
 jobs:
   php-cs-fixer:

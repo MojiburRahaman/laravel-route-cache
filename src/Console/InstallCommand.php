@@ -257,6 +257,9 @@ class InstallCommand extends Command
      * Get environment variables to add
      *
      * Uses Laravel's default REDIS_* variables, only adds Route Cache-specific ones
+     *
+     * @param string $redisHost
+     * @return array<string, string>
      */
     protected function getEnvVariables(string $redisHost): array
     {

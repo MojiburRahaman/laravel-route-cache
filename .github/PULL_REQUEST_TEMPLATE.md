@@ -28,10 +28,10 @@ Please delete options that are not relevant.
 
 ## How Has This Been Tested?
 
-Please describe the tests that you ran to verify your changes. Provide instructions so we can reproduce.
+Please provide the names and descriptions of the tests you ran to verify your changes. "Test A" and "Test B" are just placeholders—replace them with the real tests you performed. Be specific so reviewers understand how you validated your code.
 
-- [ ] Test A
-- [ ] Test B
+- [ ] <!-- Provide the actual name/description of your test, for example: "Cache correctly stores and retrieves routes" -->
+- [ ] <!-- Provide another test you performed, for example: "Lock acquisition prevents simultaneous writes" -->
 
 **Test Configuration**:
 * PHP version:
