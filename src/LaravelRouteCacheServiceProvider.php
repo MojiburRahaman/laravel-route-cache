@@ -11,6 +11,7 @@ use Mojiburrahaman\LaravelRouteCache\Config\CacheConfig;
 use Mojiburrahaman\LaravelRouteCache\Contracts\CacheKeyGeneratorInterface;
 use Mojiburrahaman\LaravelRouteCache\Contracts\CacheManagerInterface;
 use Mojiburrahaman\LaravelRouteCache\Middleware\CacheResponse;
+use Mojiburrahaman\LaravelRouteCache\Services\CacheMiddlewareHandler;
 use Mojiburrahaman\LaravelRouteCache\Services\CacheKeyGenerator;
 use Mojiburrahaman\LaravelRouteCache\Services\CacheManager;
 use Mojiburrahaman\LaravelRouteCache\Services\CacheResponseBuilder;
@@ -101,13 +102,20 @@ class LaravelRouteCacheServiceProvider extends ServiceProvider
             return new CacheResponseBuilder($app->make(CacheManagerInterface::class));
         });
 
-        // Bind middleware with all dependencies
-        $this->app->singleton(CacheResponse::class, function (Application $app): CacheResponse {
-            return new CacheResponse(
+        // Register middleware handler
+        $this->app->singleton(CacheMiddlewareHandler::class, function (Application $app): CacheMiddlewareHandler {
+            return new CacheMiddlewareHandler(
                 $app->make(CacheKeyGeneratorInterface::class),
                 $app->make(CacheManagerInterface::class),
                 $app->make(CacheValidator::class),
                 $app->make(CacheResponseBuilder::class)
+            );
+        });
+
+        // Bind middleware with all dependencies
+        $this->app->singleton(CacheResponse::class, function (Application $app): CacheResponse {
+            return new CacheResponse(
+                $app->make(CacheMiddlewareHandler::class)
             );
         });
     }
@@ -152,6 +160,7 @@ class LaravelRouteCacheServiceProvider extends ServiceProvider
             CacheValidator::class,
             CacheResponseBuilder::class,
             CacheResponse::class,
+            CacheMiddlewareHandler::class,
         ];
     }
 }
