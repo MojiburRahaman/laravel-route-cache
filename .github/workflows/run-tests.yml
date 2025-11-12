@@ -2,9 +2,9 @@ name: Run Tests
 
 on:
   push:
-    branches: [main]
+    branches: ['*']
   pull_request:
-    branches: [main]
+    branches: ['*']
   repository_dispatch:
     types: [trigger-tests]
 
@@ -16,9 +16,11 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         php: [8.3, 8.2, 8.1, 8.0]
-        laravel: [11.*, 10.*, 9.*]
+        laravel: [12.*, 11.*, 10.*, 9.*]
         stability: [prefer-lowest, prefer-stable]
         include:
+          - laravel: 12.*
+            testbench: 10.*
           - laravel: 11.*
             testbench: 9.*
           - laravel: 10.*
@@ -26,6 +28,10 @@ jobs:
           - laravel: 9.*
             testbench: 7.*
         exclude:
+          - laravel: 12.*
+            php: 8.1
+          - laravel: 12.*
+            php: 8.0
           - laravel: 11.*
             php: 8.0
           - laravel: 11.*

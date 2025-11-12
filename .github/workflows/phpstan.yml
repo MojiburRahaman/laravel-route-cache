@@ -2,9 +2,9 @@ name: PHPStan
 
 on:
   push:
-    branches: [main]
+    branches: ['*']
   pull_request:
-    branches: [main]
+    branches: ['*']
   repository_dispatch:
     types: [trigger-phpstan]
 
