@@ -107,30 +107,34 @@ class CacheManager implements CacheManagerInterface
             $hashedKey = $this->hashKey($key);
             $cached = $this->redis()->get($hashedKey);
 
-            if ($cached) {
-                // Handle array return (some Redis clients return arrays)
-                if (is_array($cached)) {
-                    $cached = $cached[0] ?? null;
-                }
-                if (! is_string($cached)) {
-                    return null;
-                }
-
-                $decoded = json_decode($cached, true);
-
-                if (! is_array($decoded)) {
-                    return null;
-                }
-
-                if (isset($decoded['compressed']) && $decoded['compressed']) {
-                    $decompressed = @gzuncompress(base64_decode($decoded['content']));
-                    if ($decompressed !== false) {
-                        $decoded['content'] = $decompressed;
-                    }
-                }
-
-                return $decoded;
+            if (! $cached) {
+                return null;
             }
+
+            // Handle array return (some Redis clients return arrays)
+            if (is_array($cached)) {
+                $cached = $cached[0] ?? null;
+            }
+
+            if (! is_string($cached)) {
+                return null;
+            }
+
+            $decoded = json_decode($cached, true);
+
+            if (! is_array($decoded)) {
+                return null;
+            }
+
+            if (isset($decoded['compressed']) && $decoded['compressed']) {
+                $decompressed = @gzuncompress(base64_decode((string) ($decoded['content'] ?? '')));
+                if ($decompressed !== false) {
+                    $decoded['content'] = $decompressed;
+                    $decoded['compressed'] = false;
+                }
+            }
+
+            return $decoded;
         } catch (\Exception $e) {
             Log::error('RouteCache get failed', ['key' => $key, 'error' => $e->getMessage()]);
         }
@@ -161,12 +165,15 @@ class CacheManager implements CacheManagerInterface
             $compressionThreshold = config('laravel-route-cache.compression_threshold', 1024);
             $shouldCompress = $contentSize > $compressionThreshold;
 
+            $expiresAt = $ttl && $ttl > 0 ? time() + $ttl : null;
+
             $cacheData = [
                 'content' => $shouldCompress ? base64_encode(gzcompress($content, 6)) : $content,
                 'status' => $response->getStatusCode(),
                 'headers' => $this->filterHeaders($response->headers->all()),
                 'cached_at' => date('Y-m-d H:i:s'),
                 'compressed' => $shouldCompress,
+                'expires_at' => $expiresAt,
             ];
 
             $serialized = json_encode($cacheData);

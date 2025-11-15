@@ -2,11 +2,12 @@ name: Check code style
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
   repository_dispatch:
     types: [trigger-php-cs-fixer]
+
+permissions:
+  contents: read
 
 jobs:
   php-cs-fixer:

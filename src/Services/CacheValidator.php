@@ -109,15 +109,41 @@ class CacheValidator
         }
 
         // Wildcard at end
-        if (str_ends_with($pattern, '*')) {
+        if ($this->endsWith($pattern, '*')) {
             $prefix = rtrim($pattern, '*');
 
-            return str_starts_with($path, $prefix);
+            if ($prefix === '') {
+                return true;
+            }
+
+            return strpos($path, $prefix) === 0;
         }
 
         // Pattern with wildcards
         $regex = '/^' . str_replace(['*', '/'], ['.*', '\/'], $pattern) . '$/';
 
         return preg_match($regex, $path) === 1;
+    }
+
+    /**
+     * Determine if the given string ends with the provided suffix.
+     *
+     * @param string $value
+     * @param string $suffix
+     * @return bool
+     */
+    protected function endsWith(string $value, string $suffix): bool
+    {
+        if ($suffix === '') {
+            return true;
+        }
+
+        $suffixLength = strlen($suffix);
+
+        if ($suffixLength > strlen($value)) {
+            return false;
+        }
+
+        return substr($value, -$suffixLength) === $suffix;
     }
 }

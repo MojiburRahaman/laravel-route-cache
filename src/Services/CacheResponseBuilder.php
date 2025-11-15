@@ -75,7 +75,7 @@ class CacheResponseBuilder
         $isJson = $this->isJsonResponse($headers);
 
         if ($isJson) {
-            return new JsonResponse(json_decode($content, true), $status);
+            return JsonResponse::fromJsonString($content, $status);
         }
 
         return new Response($content, $status);
@@ -129,7 +129,7 @@ class CacheResponseBuilder
         $response->headers->set(CacheConfig::HEADER_CACHED_AT, $cachedData['cached_at'] ?? '');
         $response->headers->set(CacheConfig::HEADER_CACHE_KEY, $cacheKey);
 
-        $ttl = $this->cacheManager->ttl($cacheKey);
+        $ttl = $this->determineTtl($cachedData, $cacheKey);
         if ($ttl !== null) {
             $response->headers->set(CacheConfig::HEADER_CACHE_TTL, (string) $ttl);
         }
@@ -152,5 +152,23 @@ class CacheResponseBuilder
             : $headers['content-type'];
 
         return strpos($contentType, 'application/json') !== false;
+    }
+
+    /**
+     * Determine the remaining TTL for the cached response without hitting Redis when possible.
+     *
+     * @param array<string, mixed> $cachedData
+     * @param string $cacheKey
+     * @return int|null
+     */
+    protected function determineTtl(array $cachedData, string $cacheKey): ?int
+    {
+        if (isset($cachedData['expires_at']) && is_numeric($cachedData['expires_at'])) {
+            $remaining = (int) $cachedData['expires_at'] - time();
+
+            return $remaining > 0 ? $remaining : 0;
+        }
+
+        return $this->cacheManager->ttl($cacheKey);
     }
 }

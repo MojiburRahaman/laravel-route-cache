@@ -2,11 +2,12 @@ name: PHPStan
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
   repository_dispatch:
     types: [trigger-phpstan]
+
+permissions:
+  contents: read
 
 jobs:
   phpstan:

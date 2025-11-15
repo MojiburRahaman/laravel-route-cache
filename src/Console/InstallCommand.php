@@ -145,12 +145,23 @@ class InstallCommand extends Command
         $this->info('⚙️  Step 3: Registering middleware...');
 
         $kernelPath = app_path('Http/Kernel.php');
+
+        if (File::exists($kernelPath)) {
+            $this->registerMiddlewareInKernel($kernelPath);
+        } else {
+            $this->registerMiddlewareInBootstrap();
+        }
+
+        $this->newLine();
+    }
+
+    protected function registerMiddlewareInKernel(string $kernelPath): void
+    {
         $kernelContent = File::get($kernelPath);
 
         // Check if already registered
         if (strpos($kernelContent, 'cache.response') !== false) {
             $this->line('✅ Middleware already registered');
-            $this->newLine();
 
             return;
         }
@@ -171,8 +182,123 @@ class InstallCommand extends Command
             $this->warn('Could not auto-register middleware. Please add manually:');
             $this->line("'cache.response' => \\Mojiburrahaman\\LaravelRouteCache\\Middleware\\CacheResponse::class,");
         }
+    }
 
-        $this->newLine();
+    protected function registerMiddlewareInBootstrap(): void
+    {
+        $bootstrapPath = base_path('bootstrap/app.php');
+
+        if (! File::exists($bootstrapPath)) {
+            throw new \RuntimeException('File does not exist at path ' . $bootstrapPath . '.');
+        }
+
+        $bootstrapContent = File::get($bootstrapPath);
+
+        if (strpos($bootstrapContent, 'cache.response') !== false) {
+            $this->line('✅ Middleware already registered');
+
+            return;
+        }
+
+        if ($updated = $this->injectIntoExistingAlias($bootstrapContent)) {
+            File::put($bootstrapPath, $updated);
+            $this->line('✅ Middleware registered in bootstrap/app.php');
+
+            return;
+        }
+
+        $search = '->withMiddleware(function (Middleware $middleware): void {' . PHP_EOL;
+        $snippet = $search .
+            "        \$aliases = \$middleware->getMiddlewareAliases();\n" .
+            "        \$aliases['cache.response'] = \\Mojiburrahaman\\LaravelRouteCache\\Middleware\\CacheResponse::class;\n" .
+            "        \$middleware->alias(\$aliases);\n";
+
+        if (strpos($bootstrapContent, $search) !== false) {
+            $bootstrapContent = str_replace($search, $snippet, $bootstrapContent);
+            File::put($bootstrapPath, $bootstrapContent);
+            $this->line('✅ Middleware registered in bootstrap/app.php');
+
+            return;
+        }
+
+        $this->warn('Could not auto-register middleware. Please add manually inside bootstrap/app.php middleware configuration:');
+        $this->line("\$aliases = \$middleware->getMiddlewareAliases();");
+        $this->line("\$aliases['cache.response'] = \\Mojiburrahaman\\LaravelRouteCache\\Middleware\\CacheResponse::class;");
+        $this->line("\$middleware->alias(\$aliases);");
+    }
+
+    protected function injectIntoExistingAlias(string $bootstrapContent): ?string
+    {
+        $aliasPos = strpos($bootstrapContent, '$middleware->alias(');
+
+        if ($aliasPos === false) {
+            return null;
+        }
+
+        $arrayStart = strpos($bootstrapContent, '[', $aliasPos);
+        if ($arrayStart === false) {
+            return null;
+        }
+
+        $offset = $arrayStart + 1;
+        $depth = 1;
+        $length = strlen($bootstrapContent);
+
+        while ($offset < $length && $depth > 0) {
+            $char = $bootstrapContent[$offset];
+
+            if ($char === '[') {
+                $depth++;
+            } elseif ($char === ']') {
+                $depth--;
+                if ($depth === 0) {
+                    break;
+                }
+            }
+
+            $offset++;
+        }
+
+        if ($depth !== 0) {
+            return null;
+        }
+
+        $insertionPoint = $offset;
+        $existingBlock = substr($bootstrapContent, $arrayStart, $insertionPoint - $arrayStart);
+
+        if (strpos($existingBlock, 'cache.response') !== false) {
+            return null;
+        }
+
+        $indentation = $this->detectIndentation($existingBlock) ?? '        ';
+        $insertion = PHP_EOL . $indentation . "'cache.response' => \\Mojiburrahaman\\LaravelRouteCache\\Middleware\\CacheResponse::class," . PHP_EOL;
+
+        return substr($bootstrapContent, 0, $insertionPoint)
+            . $insertion
+            . substr($bootstrapContent, $insertionPoint);
+    }
+
+    protected function detectIndentation(string $block): ?string
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $block);
+
+        if (! $lines) {
+            return null;
+        }
+
+        foreach ($lines as $line) {
+            if (trim($line) === '' || strpos($line, ']') !== false) {
+                continue;
+            }
+
+            preg_match('/^\s*/', $line, $matches);
+
+            if (! empty($matches[0])) {
+                return $matches[0];
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -19,17 +19,20 @@ A simple and powerful Laravel package for caching route responses in Redis. Spee
 
 ## 📋 Requirements
 
-- PHP 8.0 or higher
-- Laravel 9.x, 10.x, or 11.x
+- PHP 7.4 or higher (Laravel 8.x works on PHP 7.4+, Laravel 9+ require PHP 8.0+)
+- Laravel 8.x, 9.x, 10.x, or 11.x
 - Redis server
 
 **Version Compatibility Matrix:**
 
-| Laravel | PHP 8.0 | PHP 8.1 | PHP 8.2 | PHP 8.3 |
-|---------|---------|---------|---------|---------|
-| 9.x     | ✅      | ✅      | ✅      | ✅      |
-| 10.x    | ❌      | ✅      | ✅      | ✅      |
-| 11.x    | ❌      | ❌      | ✅      | ✅      |
+| Laravel | PHP 7.4 | PHP 8.0 | PHP 8.1 | PHP 8.2 | PHP 8.3 |
+|---------|---------|---------|---------|---------|---------|
+| 8.x     | ✅      | ✅      | ✅      | ✅*     | ✅*     |
+| 9.x     | ❌      | ✅      | ✅      | ✅      | ✅      |
+| 10.x    | ❌      | ❌      | ✅      | ✅      | ✅      |
+| 11.x    | ❌      | ❌      | ❌      | ✅      | ✅      |
+
+> \* Laravel 8 officially supports PHP up to 8.1. Later PHP 8 releases work in practice but depend on corresponding framework updates. Use the Laravel version that matches your PHP runtime.
 
 ## 📦 Installation
 
